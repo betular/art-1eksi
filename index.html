@@ -1,0 +1,327 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>3B Elektrik Alan (+ -)</title>
+
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+</head>
+
+<body style="margin:0; overflow:hidden;">
+
+<a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+
+  <a-marker preset="hiro">
+
+    <!-- POZİTİF YÜK -->
+    <a-sphere
+      position="-1 0 0"
+      radius="0.15"
+      color="red">
+    </a-sphere>
+
+    <!-- NEGATİF YÜK -->
+    <a-sphere
+      position="1 0 0"
+      radius="0.15"
+      color="blue">
+    </a-sphere>
+
+    <!-- POZİTİF ETİKET -->
+    <a-entity position="-1 0.38 0">
+      <a-plane width="0.75" height="0.25"
+        color="black" opacity="0.9"></a-plane>
+      <a-text value="POZİTİF (+)"
+        color="white" align="center"
+        position="0 0 0.02" width="3"></a-text>
+    </a-entity>
+
+    <!-- NEGATİF ETİKET -->
+    <a-entity position="1 0.38 0">
+      <a-plane width="0.75" height="0.25"
+        color="black" opacity="0.9"></a-plane>
+      <a-text value="NEGATİF (-)"
+        color="white" align="center"
+        position="0 0 0.02" width="3"></a-text>
+    </a-entity>
+
+    <a-entity id="field"></a-entity>
+
+  </a-marker>
+
+  <a-entity camera></a-entity>
+
+</a-scene>
+
+
+<script>
+
+const field = document.querySelector("#field");
+
+
+// =====================================================
+// YÜKLER
+// =====================================================
+
+const charges = [
+  {x:-1, y:0, z:0, q: 1},
+  {x: 1, y:0, z:0, q:-1}
+];
+
+
+// =====================================================
+// ELEKTRİK ALANI
+// =====================================================
+
+function E(x,y,z){
+
+  let Ex = 0;
+  let Ey = 0;
+  let Ez = 0;
+
+  charges.forEach(c => {
+
+    let dx = x - c.x;
+    let dy = y - c.y;
+    let dz = z - c.z;
+
+    let r2 = dx*dx + dy*dy + dz*dz;
+    let r = Math.sqrt(r2);
+
+    if(r < 0.05) return;
+
+    Ex += c.q * dx / (r*r*r);
+    Ey += c.q * dy / (r*r*r);
+    Ez += c.q * dz / (r*r*r);
+
+  });
+
+  return {Ex,Ey,Ez};
+}
+
+
+// =====================================================
+// TEK BİR KESİNTİSİZ ÇİZGİ
+// =====================================================
+
+function createLine(x,y,z){
+
+  const points = [];
+
+  for(let i=0; i<240; i++){
+
+    let f = E(x,y,z);
+
+    let mag = Math.sqrt(
+      f.Ex*f.Ex +
+      f.Ey*f.Ey +
+      f.Ez*f.Ez
+    );
+
+    if(mag < 0.0001) break;
+
+    const step = 0.025;
+
+    let dx = f.Ex / mag * step;
+    let dy = f.Ey / mag * step;
+    let dz = f.Ez / mag * step;
+
+    let nx = x + dx;
+    let ny = y + dy;
+    let nz = z + dz;
+
+
+    // YÜKLERE UZAKLIKLAR
+
+    let positiveDistance =
+      Math.sqrt(
+        (nx+1)**2 +
+        ny*ny +
+        nz*nz
+      );
+
+    let negativeDistance =
+      Math.sqrt(
+        (nx-1)**2 +
+        ny*ny +
+        nz*nz
+      );
+
+
+    // Pozitif yüke geri girerse bitir
+    if(positiveDistance < 0.14){
+      break;
+    }
+
+
+    // Negatif yüke ulaştıysa son noktayı ekle
+    if(negativeDistance < 0.14){
+
+      points.push({
+        x:nx,
+        y:ny,
+        z:nz
+      });
+
+      break;
+    }
+
+
+    // Alan sınırından çıktıysa bitir
+    if(
+      Math.abs(nx) > 3 ||
+      Math.abs(ny) > 2 ||
+      Math.abs(nz) > 2
+    ){
+      break;
+    }
+
+
+    points.push({
+      x:nx,
+      y:ny,
+      z:nz
+    });
+
+    x = nx;
+    y = ny;
+    z = nz;
+  }
+
+
+  if(points.length < 8) return;
+
+
+  // ===================================================
+  // TEK PARÇA ÇİZGİ
+  // ===================================================
+
+  for(let i=1; i<points.length; i++){
+
+    let p1 = points[i-1];
+    let p2 = points[i];
+
+    let line = document.createElement("a-entity");
+
+    line.setAttribute("line", {
+      start: `${p1.x} ${p1.y} ${p1.z}`,
+      end: `${p2.x} ${p2.y} ${p2.z}`,
+      color: "white"
+    });
+
+    field.appendChild(line);
+
+
+    // OKLAR - YÖNLER DEĞİŞTİRİLMEDİ
+    if(i % 35 === 0){
+
+      let dx = p2.x-p1.x;
+      let dy = p2.y-p1.y;
+      let dz = p2.z-p1.z;
+
+      let dir =
+        new AFRAME.THREE.Vector3(
+          dx,dy,dz
+        ).normalize();
+
+
+      let arrow =
+        document.createElement("a-cone");
+
+      arrow.setAttribute(
+        "color",
+        "yellow"
+      );
+
+      arrow.setAttribute(
+        "radius-bottom",
+        "0.018"
+      );
+
+      arrow.setAttribute(
+        "radius-top",
+        "0"
+      );
+
+      arrow.setAttribute(
+        "height",
+        "0.045"
+      );
+
+      arrow.setAttribute(
+        "position",
+        `${p2.x} ${p2.y} ${p2.z}`
+      );
+
+
+      let quaternion =
+        new AFRAME.THREE.Quaternion();
+
+      quaternion.setFromUnitVectors(
+        new AFRAME.THREE.Vector3(0,1,0),
+        dir
+      );
+
+      arrow.object3D.quaternion.copy(
+        quaternion
+      );
+
+      field.appendChild(arrow);
+    }
+  }
+}
+
+
+
+// =====================================================
+// POZİTİF YÜKTEN ÇIKAN ÇİZGİLER
+// =====================================================
+
+const startRadius = 0.20;
+
+for(let theta=0; theta<360; theta+=30){
+
+  let t = theta * Math.PI / 180;
+
+  for(let phi=-45; phi<=45; phi+=45){
+
+    let p = phi * Math.PI / 180;
+
+    let x = startRadius * Math.cos(p) * Math.cos(t);
+    let y = startRadius * Math.sin(p);
+    let z = startRadius * Math.cos(p) * Math.sin(t);
+
+    createLine(
+      -1 + x,
+      y,
+      z
+    );
+  }
+}
+
+
+// =====================================================
+// NEGATİF KÜRENİN SAĞINDAN GELEN ÇİZGİLER
+// =====================================================
+
+const rightPoints = [
+  [3, 0, 0],
+  [3, 0.5, 0],
+  [3, -0.5, 0],
+  [3, 0, 0.5],
+  [3, 0, -0.5],
+  [3, 0.8, 0.5],
+  [3, -0.8, -0.5]
+];
+
+rightPoints.forEach(p => {
+  createLine(p[0], p[1], p[2]);
+});
+
+</script>
+
+</body>
+</html>
+
